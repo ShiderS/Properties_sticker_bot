@@ -6,6 +6,9 @@
 <ul>
   <li>Установить Python 3.11</li>
 
+  <li>Склонировать репозиторий:</li>
+  <code>git clone https://github.com/ShiderS/Properties_sticker_bot.git</code>
+
   <li>Установить pipenv:</li>
   <code>pip install pipenv</code>
       
