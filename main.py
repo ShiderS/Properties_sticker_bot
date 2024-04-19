@@ -38,7 +38,7 @@ async def cmd_start(message: types.Message) -> Message:
 
 
 @dp.message(Command("image"))
-async def give_photo(message: types.Message, state: FSMContext) -> Message:
+async def get_photo(message: types.Message, state: FSMContext) -> Message:
     await message.answer("Пришлите своё фото")
     await state.set_state(PhotoState.waiting_for_photo)
 
