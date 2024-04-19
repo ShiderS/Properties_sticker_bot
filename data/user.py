@@ -11,7 +11,9 @@ class User(SqlAlchemyBase, UserMixin, SerializerMixin):
 
     id = sqlalchemy.Column(sqlalchemy.Integer,
                            primary_key=True, nullable=False)
-    name = sqlalchemy.Column(sqlalchemy.String, nullable=True)
+    full_name = sqlalchemy.Column(sqlalchemy.String, nullable=True)
+    tg_name = sqlalchemy.Column(sqlalchemy.String, nullable=True)
+    workload = sqlalchemy.Column(sqlalchemy.Integer, nullable=True, default=0)
     created_date = sqlalchemy.Column(sqlalchemy.DateTime,
                                      default=datetime.datetime.now)
 

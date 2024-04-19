@@ -3,11 +3,12 @@ import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import Message
+from data import db_session
 
 from config.config import TG_TOKEN_DEV
+from data.user import User
 
 __all__ = []
-
 
 bot = Bot(TG_TOKEN_DEV)
 dp = Dispatcher()
@@ -15,6 +16,15 @@ dp = Dispatcher()
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message) -> Message:
+    if message.chat.id not in [i.id for i in DB_SESS.query(User).all()]:
+        user = User(
+            id=message.chat.id,
+            full_name=message.from_user.full_name,
+            tg_name=message.chat.username
+        )
+        DB_SESS.add(user)
+        DB_SESS.commit()
+    # print(message.from_user.id)
     text_answer = f"Привет {message.from_user.first_name}"
     await message.answer(text_answer)
 
