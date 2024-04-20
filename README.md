@@ -6,6 +6,9 @@
 <ul>
   <li>Установить Python 3.11</li>
 
+  <li>Склонировать репозиторий:</li>
+  <code>git clone https://github.com/ShiderS/Properties_sticker_bot.git</code>
+
   <li>Установить pipenv:</li>
   <code>pip install pipenv</code>
       
@@ -19,5 +22,5 @@
 
 </ul>
 <b>🚀Чтобы запустить проект:</b>
-<br><code>pipenv run python server.py</code></br>
+<br><code>pipenv run python main.py</code></br>
 В консоле должно вывести: <b>"Подключение к базе данных по адресу..."</b>
