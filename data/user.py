@@ -1,9 +1,15 @@
 import datetime
-import sqlalchemy
-from sqlalchemy_serializer import SerializerMixin
+
+from data.db_session import SqlAlchemyBase
+
 from flask_login import UserMixin
 
-from .db_session import SqlAlchemyBase
+import sqlalchemy
+
+from sqlalchemy_serializer import SerializerMixin
+
+
+__all__ = []
 
 
 class User(SqlAlchemyBase, UserMixin, SerializerMixin):
