@@ -7,6 +7,7 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
+from aiogram.types.input_media_photo import InputMediaPhoto
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config.config import TG_TOKEN_DEV
@@ -19,7 +20,11 @@ from config.kb import (
 from data import db_session
 from data.user import User
 
+from PIL import Image
+
 __all__ = []
+
+list_photo = []
 
 
 bot = Bot(TG_TOKEN_DEV)
@@ -69,7 +74,9 @@ async def process_message(
     state: FSMContext,
 ) -> Message:
     image_id = message.photo[-1].file_id
-    await message.answer_photo(photo=image_id)
+    list_photo.append(image_id)
+    media_group_odnorazki = [InputMediaPhoto(media=i) for i in list_photo]
+    await message.answer_media_group(media=media_group_odnorazki)
     await state.clear()
 
 
