@@ -40,7 +40,7 @@ async def process_message(
 
 @dp.message(Command("start"))
 async def start(message: types.Message) -> Message:
-    text_answer = f"Привет {message.from_user.first_name}"
+    text_answer = f"Привет {message.from_user.first_name}!"
     await message.answer(text_answer, reply_markup=keyboard_user)
 
 
