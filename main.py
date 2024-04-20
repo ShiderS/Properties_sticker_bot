@@ -14,8 +14,19 @@ bot = Bot(TG_TOKEN_DEV)
 dp = Dispatcher()
 
 
+def convert_to_binary_data(file):
+    if file != '':
+        with open(file, 'rb') as file:
+            blob_data = file.read()
+        return blob_data
+
+
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message) -> Message:
+    # developers = DB_SESS.query(User).filter(User.is_developer == True).all()
+    # developers_workload = {i.id: i.workload for i in DB_SESS.query(User).filter(User.is_developer == True).all()}
+    # print(developers_workload)
+
     if message.chat.id not in [i.id for i in DB_SESS.query(User).all()]:
         user = User(
             id=message.chat.id,
