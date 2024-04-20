@@ -6,10 +6,10 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
-from data import db_session
-from typing import Optional
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
+from data import db_session
+from typing import Optional
 
 from config.config import TG_TOKEN_DEV
 from data.user import User
