@@ -1,4 +1,3 @@
-import datetime
 import sqlalchemy
 from sqlalchemy_serializer import SerializerMixin
 from flask_login import UserMixin
@@ -14,4 +13,3 @@ class Pattern(SqlAlchemyBase, UserMixin, SerializerMixin):
     user_id = sqlalchemy.Column(sqlalchemy.Integer, sqlalchemy.ForeignKey("users.id"), nullable=False)
     for_everyone = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=False)
     image = sqlalchemy.BLOB(sqlalchemy.BLOB)
-
