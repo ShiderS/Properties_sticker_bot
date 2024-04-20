@@ -90,7 +90,7 @@ async def cmd_start(message: types.Message) -> Message:
 @dp.message(Command("help"))
 @dp.message(F.text == "Помощь")
 async def help(message: types.Message) -> Message:
-    await message.answer("Выбрать шаблон")
+    await message.answer("Помощь")
 
 
 @dp.message(Command("menu"))
@@ -179,7 +179,7 @@ async def create_stickerpak(message: types.Message) -> Message:
 @dp.message(F.text == "Создать шаблон")
 async def create_template(message: types.Message) -> Message:
     await message.answer(
-        "Выбрать шаблон",
+        "Создать шаблон",
         reply_markup=keyboard_user_create_pattern,
     )
 
