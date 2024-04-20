@@ -137,7 +137,7 @@ async def callbacks_num_change_fab(callback: types.CallbackQuery, callback_data:
         in_answer = [True, callback_data.id]
 
     elif callback_data.action == "cancel":
-        admin = DB_SESS.query(User).filter(User.id == callback.message.from_user.id).first()
+        admin = DB_SESS.query(User).filter(User.id == callback_data.id).first()
         admin.workload -= 1
         DB_SESS.commit()
         await bot.send_message(callback_data.id, "Вопрос отклонён")
