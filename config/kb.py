@@ -24,3 +24,13 @@ kb_user_create_pattern = [
 keyboard_user_create_pattern = ReplyKeyboardMarkup(
     keyboard=kb_user_create_pattern,
 )
+
+
+kb_base_patterns = [
+    [KeyboardButton(text="1")],
+    [KeyboardButton(text="2")],
+    [KeyboardButton(text="3")]
+]
+keyboard_base_patterns = ReplyKeyboardMarkup(
+    keyboard=kb_base_patterns
+)

@@ -19,6 +19,7 @@ from config.kb import (
     keyboard_user,
     keyboard_user_create_pattern,
     keyboard_user_pattern,
+    keyboard_base_patterns
 )
 
 
@@ -120,7 +121,26 @@ async def create_template(message: types.Message) -> Message:
 @dp.message(Command("choose_pattern"))
 @dp.message(F.text == "Выбрать шаблон")
 async def choose_template(message: types.Message) -> Message:
-    await message.answer("Выбрать шаблон")
+    for p in [0, 1, 2]:
+        base_patterns = DB_SESS.query(Pattern).filter(Pattern.pattern_id == p).all()
+        media_group_goo = [
+            InputMediaPhoto(media=i.image_id) for i in base_patterns
+        ]
+        await message.answer_media_group(media=media_group_goo)
+        await message.answer(f"{p + 1} шаблон")
+    await message.answer(
+        "Выберете нужный вам шаблон из предложенных или воспользуйтесь шаблонами "
+        'других пользователей.\n /view_pattern "id" - просмотреть шаблон\n'
+        '/pattern "id" - выбрать нужный шаблон',
+        reply_markup=keyboard_base_patterns,
+    )
+
+
+# Выбор шаблона из базовых или шаблонов других пользователей(по id или названию шаблона)
+@dp.message(Command("Pattern"))
+@dp.message(F.text == "")
+async def choose_tempate(message: types.Message) -> Message:
+    pass
 
 
 # для генерации стикерпака
