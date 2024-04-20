@@ -8,11 +8,13 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
+from aiogram.types.input_media_photo import InputMediaPhoto
 from data import db_session
 from typing import Optional
 
 from config.config import TG_TOKEN_DEV
 from data.user import User
+from data.pattern import Pattern
 from config.kb import (
     keyboard_user,
     keyboard_user_create_pattern,
@@ -27,8 +29,8 @@ bot = Bot(TG_TOKEN_DEV)
 dp = Dispatcher()
 
 images_list = []
+pattern_id = 0
 
-ADMIN_ID = 997029220
 users_in_support = []
 in_time = []
 in_answer = [False, 0]
@@ -36,6 +38,8 @@ in_answer = [False, 0]
 
 class PhotoState(StatesGroup):
     waiting_for_photo: State = State()
+    waiting_for_photo2: State = State()
+    waiting_for_photo3: State = State()
 
 
 class DataForAnswer(CallbackData, prefix="fabnum"):
@@ -51,29 +55,8 @@ def markup_for_admin_ans(user_id):
     return anser_admin_kb
 
 
-def convert_to_binary_data(file):
-    if file != '':
-        with open(file, 'rb') as file:
-            blob_data = file.read()
-        return blob_data
-
-
-@dp.message(PhotoState.waiting_for_photo, F.photo)
-async def process_message(
-    message: types.Message,
-    state: FSMContext,
-) -> Message:
-    image_id = message.photo[-1].file_id
-    await message.answer_photo(photo=image_id)
-    await state.clear()
-
-
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message) -> Message:
-    # developers = DB_SESS.query(User).filter(User.is_developer == True).all()
-    # developers_workload = {i.id: i.workload for i in DB_SESS.query(User).filter(User.is_developer == True).all()}
-    # print(developers_workload)
-
     if message.chat.id not in [i.id for i in DB_SESS.query(User).all()]:
         user = User(
             id=message.chat.id,
@@ -82,7 +65,6 @@ async def cmd_start(message: types.Message) -> Message:
         )
         DB_SESS.add(user)
         DB_SESS.commit()
-    # print(message.from_user.id)
     text_answer = f"Привет {message.from_user.first_name}"
     await message.answer(text_answer, reply_markup=keyboard_user)
 
@@ -106,7 +88,8 @@ async def get_photo(message: types.Message, state: FSMContext) -> Message:
 
 
 # Команда для обращения в поддержку
-@dp.message(Command('support'))
+@dp.message(Command("support"))
+@dp.message(F.text == "Обратная связь")
 async def support(message: types.Message):
     if message.from_user.id in [i.id for i in DB_SESS.query(User).filter(User.is_developer).all()]:
         await message.reply("Вы являетесь админом и не можете задавать вопросы.")
@@ -116,6 +99,110 @@ async def support(message: types.Message):
         await message.reply("Введите ваше сообщение для поддержки.")
 
 
+@dp.message(Command("generate"))
+@dp.message(F.text == "Создать стикерпак")
+async def create_stickerpak(message: types.Message) -> Message:
+    await message.answer(
+        "Создать стикерпак",
+        reply_markup=keyboard_user_pattern,
+    )
+
+
+@dp.message(Command("new_pattern"))
+@dp.message(F.text == "Создать шаблон")
+async def create_template(message: types.Message) -> Message:
+    await message.answer(
+        "Создать шаблон",
+        reply_markup=keyboard_user_create_pattern,
+    )
+
+
+@dp.message(Command("choose_pattern"))
+@dp.message(F.text == "Выбрать шаблон")
+async def choose_template(message: types.Message) -> Message:
+    await message.answer("Выбрать шаблон")
+
+
+# для генерации стикерпака
+@dp.message(PhotoState.waiting_for_photo, F.photo)
+async def process_message(
+    message: types.Message,
+    state: FSMContext,
+) -> Message:
+    image_id = message.photo[-1].file_id
+    await message.answer_photo(photo=image_id)
+    await state.clear()
+
+
+# ----------------------Генерация шаблонов-------------------------
+# для генерации публичного шаблона
+@dp.message(PhotoState.waiting_for_photo2, F.photo)
+async def process_message(
+    message: types.Message,
+    state: FSMContext,
+) -> Message:
+    global pattern_id
+
+    image_id = message.photo[-1].file_id
+
+    await create_pattern_db(pattern_id, message.from_user.id, True, image_id)
+    await state.clear()
+
+
+# для генерации приватного шалона
+@dp.message(PhotoState.waiting_for_photo3, F.photo)
+async def process_message(
+    message: types.Message,
+    state: FSMContext,
+) -> Message:
+    global pattern_id
+
+    image_id = message.photo[-1].file_id
+
+    await create_pattern_db(pattern_id, message.from_user.id, False, image_id)
+    await state.clear()
+
+
+# занесение шаблона в базу данных
+async def create_pattern_db(pattern_id, user_id, for_everyone, file_id):
+    pattern = Pattern(
+        pattern_id=pattern_id,
+        user_id=user_id,
+        for_everyone=for_everyone,
+        image_id=file_id
+    )
+    DB_SESS.add(pattern)
+    DB_SESS.commit()
+
+
+@dp.message(Command("for_everyone"))
+@dp.message(F.text == "Публичный")
+async def public_template(message: types.Message, state: FSMContext) -> Message:
+    global pattern_id
+    patterns = DB_SESS.query(Pattern).all()
+    if len(patterns) == 0:
+        pattern_id = 0
+    else:
+        pattern_id = patterns[-1].pattern_id + 1
+    await message.answer("Пришлите несколько фото для генерации шаблона(обязательно одним сообщением)")
+    await state.set_state(PhotoState.waiting_for_photo2)
+
+
+@dp.message(Command("for_me"))
+@dp.message(F.text == "Приватный")
+async def private_template(message: types.Message, state: FSMContext) -> Message:
+    global pattern_id
+    patterns = DB_SESS.query(Pattern).all()
+    if len(patterns) == 0:
+        pattern_id = 0
+    else:
+        pattern_id = patterns[-1].pattern_id + 1
+    await message.answer("Пришлите несколько фото для генерации шаблона(обязательно одним сообщением)")
+    await state.set_state(PhotoState.waiting_for_photo3)
+# ---------------------------------------------------------------
+
+
+# -------------------------Поддержка-----------------------------
 @dp.message()
 async def handle_message(message: types.Message):
     # Проверяем, обратился ли пользователь в поддержку
@@ -164,42 +251,7 @@ async def callbacks_num_change_fab(callback: types.CallbackQuery, callback_data:
         users_in_support.remove(callback_data.id)
         in_time.remove(callback_data.id)
     await callback.answer()
-
-
-@dp.message(Command("generate"))
-@dp.message(F.text == "Создать стикерпак")
-async def create_stickerpak(message: types.Message) -> Message:
-    await message.answer(
-        "Создать стикерпак",
-        reply_markup=keyboard_user_pattern,
-    )
-
-
-@dp.message(Command("new_pattern"))
-@dp.message(F.text == "Создать шаблон")
-async def create_template(message: types.Message) -> Message:
-    await message.answer(
-        "Создать шаблон",
-        reply_markup=keyboard_user_create_pattern,
-    )
-
-
-@dp.message(Command("choose_pattern"))
-@dp.message(F.text == "Выбрать шаблон")
-async def choose_template(message: types.Message) -> Message:
-    await message.answer("Выбрать шаблон")
-
-
-@dp.message(Command("for_everyone"))
-@dp.message(F.text == "Публичный")
-async def public_template(message: types.Message) -> Message:
-    await message.answer("Публичный")
-
-
-@dp.message(Command("for_me"))
-@dp.message(F.text == "Приватный")
-async def private_template(message: types.Message) -> Message:
-    await message.answer("Приватный")
+# -----------------------------------------------------------------------------
 
 
 async def main() -> None:
