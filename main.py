@@ -9,6 +9,7 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 from aiogram.types.input_media_photo import InputMediaPhoto
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 from data import db_session
 from typing import Optional
 
@@ -18,8 +19,7 @@ from data.pattern import Pattern
 from config.kb import (
     keyboard_user,
     keyboard_user_create_pattern,
-    keyboard_user_pattern,
-    keyboard_base_patterns
+    keyboard_user_pattern
 )
 
 
@@ -154,13 +154,21 @@ async def choose_template(message: types.Message) -> Message:
     media_group_goo = [
         InputMediaPhoto(media=i.image_id) for i in base_patterns_collage
     ]
+    patterns = []
+    for p in DB_SESS.query(Pattern).all():
+        if p.pattern_name not in patterns and p.pattern_id in [1, 2]:
+            patterns.append(p.pattern_name)
+    kb_base_patterns = [
+        [KeyboardButton(text=patterns[0])],
+        [KeyboardButton(text=patterns[1])],
+    ]
     await message.answer_media_group(media=media_group_goo)
     await message.answer(
         "Выберете нужный вам шаблон из предложенных или воспользуйтесь шаблонами "
         'других пользователей.\n/select_pattern "Название шаблона" - выбрать шаблон\n'
         "/patterns - вывести список всех доступных шаблонов\n"
         "Чтобы просмотреть шаблон, напишите в чат его название",
-        reply_markup=keyboard_base_patterns,
+        reply_markup=ReplyKeyboardMarkup(keyboard=kb_base_patterns),
     )
 
 
@@ -323,7 +331,7 @@ async def check_patterns(
 
 
 @dp.message(Command("view_pattern"))
-async def check_pattern(
+async def view_pattern(
         message: types.Message,
         command: CommandObject
 ):
@@ -337,6 +345,8 @@ async def check_pattern(
                     InputMediaPhoto(media=i.image_id) for i in pattern
                 ]
                 await message.answer_media_group(media=media_group_goo)
+        else:
+            await message.answer("Вы не указали название шаблона")
     else:
         await message.answer(f"У вас нет прав, чтобы использовать эту команду")
 
@@ -357,7 +367,39 @@ async def approve_pattern(
                 DB_SESS.commit()
                 await message.answer(f"Шаблону {pattern[0].pattern_name} присвоен публичный статус")
         else:
-            await message.answer(f"У вас нет прав, чтобы использовать эту команду")
+            await message.answer("Вы не указали название ")
+    else:
+        await message.answer(f"У вас нет прав, чтобы использовать эту команду")
+
+
+@dp.message(Command("not_approve_pattern"))
+async def not_approve_pattern(
+        message: types.Message,
+        command: CommandObject
+):
+    if DB_SESS.query(User).filter(User.id == message.from_user.id).first().is_developer:
+        if command.args:
+            try:
+                pattern_name, text = command.args.split(" ", maxsplit=1)
+                print(pattern_name, text)
+                pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == pattern_name).all()
+                if len(pattern) == 0:
+                    await message.answer("Шаблона с таким названием не существует или вы ввели неправильное название")
+                else:
+                    for i in pattern:
+                        i.for_everyone = 0
+                    DB_SESS.commit()
+                    await message.answer(f"Шаблону {pattern[0].pattern_name} присвоен публичный статус")
+                # Если получилось меньше двух частей, вылетит ValueError
+            except ValueError:
+                await message.answer(
+                    "Ошибка: неправильный формат команды. Пример:\n"
+                    "/not_approve_pattern <Название шаблона> <Пояснение>"
+                )
+        else:
+            await message.answer(f"Не переданы аргументы")
+    else:
+        await message.answer(f"У вас нет прав, чтобы использовать эту команду")
 
 
 # --------------------------------------------------------------
