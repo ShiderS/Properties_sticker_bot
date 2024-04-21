@@ -15,3 +15,4 @@ class Pattern(SqlAlchemyBase, UserMixin, SerializerMixin):
     image_id = sqlalchemy.Column(sqlalchemy.String, nullable=False)
 
     is_public = sqlalchemy.Column(sqlalchemy.Boolean, nullable=False, default=False)
+    pattern_name = sqlalchemy.Column(sqlalchemy.String, nullable=True)

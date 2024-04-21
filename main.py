@@ -36,6 +36,8 @@ users_in_support = []
 in_time = []
 in_answer = [False, 0]
 
+flag_pattern_name = False
+
 
 class PhotoState(StatesGroup):
     waiting_for_photo: State = State()
@@ -56,8 +58,22 @@ def markup_for_admin_ans(user_id):
     return anser_admin_kb
 
 
+def del_last_pattern(message):
+    global flag_pattern_name
+    if flag_pattern_name:
+        flag_pattern_name = False
+        patterns_user = DB_SESS.query(Pattern).filter(Pattern.user_id == message.from_user.id)
+        last_pattern_id = max(i.pattern_id for i in patterns_user)
+        last_pattern_user = DB_SESS.query(Pattern).filter(Pattern.pattern_id == last_pattern_id)
+        for p in last_pattern_user:
+            if not p.pattern_name:
+                DB_SESS.delete(p)
+        DB_SESS.commit()
+
+
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message) -> Message:
+    del_last_pattern(message)
     if message.chat.id not in [i.id for i in DB_SESS.query(User).all()]:
         user = User(
             id=message.chat.id,
@@ -79,6 +95,7 @@ async def help(message: types.Message) -> Message:
 @dp.message(Command("menu"))
 @dp.message(F.text == "Меню")
 async def menu(message: types.Message) -> Message:
+    del_last_pattern(message)
     await message.answer("Меню", reply_markup=keyboard_user)
 
 
@@ -92,6 +109,7 @@ async def get_photo(message: types.Message, state: FSMContext) -> Message:
 @dp.message(Command("support"))
 @dp.message(F.text == "Обратная связь")
 async def support(message: types.Message):
+    del_last_pattern(message)
     if message.from_user.id in [i.id for i in DB_SESS.query(User).filter(User.is_developer).all()]:
         await message.reply("Вы являетесь админом и не можете задавать вопросы.")
     else:
@@ -103,8 +121,9 @@ async def support(message: types.Message):
 @dp.message(Command("generate"))
 @dp.message(F.text == "Создать стикерпак")
 async def create_stickerpak(message: types.Message) -> Message:
+    del_last_pattern(message)
     await message.answer(
-        "Создать стикерпак",
+        "Выбрать шаблон из доступных или создать свой?",
         reply_markup=keyboard_user_pattern,
     )
 
@@ -112,8 +131,11 @@ async def create_stickerpak(message: types.Message) -> Message:
 @dp.message(Command("new_pattern"))
 @dp.message(F.text == "Создать шаблон")
 async def create_template(message: types.Message) -> Message:
+    del_last_pattern(message)
     await message.answer(
-        "Создать шаблон",
+        "Будет ли ваш шаблон доступен для других пользователей?\n"
+        "Если да, для начала он должен будет пройти проверку администрацией,"
+        " и только потом им смогут воспользоваться другие пользователи.",
         reply_markup=keyboard_user_create_pattern,
     )
 
@@ -121,6 +143,8 @@ async def create_template(message: types.Message) -> Message:
 @dp.message(Command("choose_pattern"))
 @dp.message(F.text == "Выбрать шаблон")
 async def choose_template(message: types.Message) -> Message:
+    global flag_pattern_name
+    flag_pattern_name = True
     for p in [0, 1, 2]:
         base_patterns = DB_SESS.query(Pattern).filter(Pattern.pattern_id == p).all()
         media_group_goo = [
@@ -198,26 +222,30 @@ async def create_pattern_db(pattern_id, user_id, for_everyone, file_id):
 @dp.message(Command("for_everyone"))
 @dp.message(F.text == "Публичный")
 async def public_template(message: types.Message, state: FSMContext) -> Message:
-    global pattern_id
+    global pattern_id, flag_pattern_name
     patterns = DB_SESS.query(Pattern).all()
     if len(patterns) == 0:
         pattern_id = 0
     else:
         pattern_id = patterns[-1].pattern_id + 1
-    await message.answer("Пришлите несколько фото для генерации шаблона(обязательно одним сообщением)")
+    await message.answer("Пришлите несколько фото для генерации шаблона.\n"
+                         "Когда фото будет достаточно, напишите название шаблона в чат.")
+    flag_pattern_name = True
     await state.set_state(PhotoState.waiting_for_photo2)
 
 
 @dp.message(Command("for_me"))
 @dp.message(F.text == "Приватный")
 async def private_template(message: types.Message, state: FSMContext) -> Message:
-    global pattern_id
+    global pattern_id, flag_pattern_name
     patterns = DB_SESS.query(Pattern).all()
     if len(patterns) == 0:
         pattern_id = 0
     else:
         pattern_id = patterns[-1].pattern_id + 1
-    await message.answer("Пришлите несколько фото для генерации шаблона(обязательно одним сообщением)")
+    await message.answer("Пришлите несколько фото для генерации шаблона.\n"
+                         "Когда фото будет достаточно, напишите название шаблона в чат.")
+    flag_pattern_name = True
     await state.set_state(PhotoState.waiting_for_photo3)
 # ---------------------------------------------------------------
 
@@ -226,8 +254,18 @@ async def private_template(message: types.Message, state: FSMContext) -> Message
 @dp.message()
 async def handle_message(message: types.Message):
     # Проверяем, обратился ли пользователь в поддержку
-    global in_answer
-    if in_answer[0]:
+    global in_answer, flag_pattern_name
+    if flag_pattern_name:
+        patterns_user = DB_SESS.query(Pattern).filter(Pattern.user_id == message.from_user.id).all()
+        last_pattern_id = max(i.pattern_id for i in patterns_user)
+        last_pattern_user = DB_SESS.query(Pattern).filter(Pattern.pattern_id == last_pattern_id).all()
+        for p in last_pattern_user:
+            p.pattern_name = message.text
+        DB_SESS.commit()
+        flag_pattern_name = False
+        await message.answer(f"Ваш шаблон был добавлен в базу данных с названием {message.text}")
+
+    elif in_answer[0]:
         admin = DB_SESS.query(User).filter(User.id == message.from_user.id).first()
         admin.workload -= 1
         DB_SESS.commit()
