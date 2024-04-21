@@ -4,7 +4,7 @@
 
 <p><b>Чтобы запустить проект, вам нужно:</b></p>
 <ul>
-  <li>Установить Python 3.11</li>
+  <li>Установить Python 3.10</li>
 
   <li>Склонировать репозиторий:</li>
   <code>git clone https://github.com/ShiderS/Properties_sticker_bot.git</code>
