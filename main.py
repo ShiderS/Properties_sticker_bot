@@ -1,5 +1,7 @@
 import asyncio
-
+import subprocess
+import os
+import json
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandObject
@@ -49,6 +51,30 @@ class PhotoState(StatesGroup):
 class DataForAnswer(CallbackData, prefix="fabnum"):
     action: str
     id: Optional[int] = None
+
+
+def dir_cleaning(directory):
+    for filename in os.listdir(directory):
+        filepath = os.path.join(directory, filename)
+        try:
+            if os.path.isfile(filepath):
+                os.remove(filepath)
+        except Exception as e:
+            print(f"Ошибка при удалении файла {filename}: {e}")
+
+
+def faceswap(patternfolder):
+    dir_cleaning('/faceswap/inFace') # Очищаем папку с картинкой пользователя
+    dir_cleaning('/faceswap/outDir') # Очищаем папку в которой лежат уже готовые фотки
+
+    #код сохранения кортинки пользователя в папку faceswap/inFace
+
+    subprocess.call("python faceswap/faceswap.py extract -i faceswap/inFace -o faceswap/faces -D mtcnn -A cv2-dnn",
+                    shell=True) # Выполняем волшебные действия для добычи лица из фотки пользователя
+
+    subprocess.call(f"python faceswap/faceswap.py convert -i faceswap/patterns/{patternfolder} -o faceswap/outDir -p faceswap/inFace/alignments.fsa -m faceswap/hackaton_smart_cnn -c color-transfer -M none -w opencv",
+                    shell=True)# faceswap/patterns/название папки с шаблонами
+    # В папке faceswap/outDir хранятся обработанные фотки
 
 
 def markup_for_admin_ans(user_id):
@@ -371,6 +397,12 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    with open('needSetup.json') as file:
+        data = json.load(file)
+    if data['needSetup']:    data['needSetup'] = 0
+    with open('needSetup.json', 'w') as file:
+        json.dump(data, file)
+    subprocess.call("python faceswap/setup.py", shell=True)
     db_session.global_init("db/db.db")
     DB_SESS = db_session.create_session()
     asyncio.run(main())
