@@ -8,6 +8,7 @@ python-dotenv = "*"
 aiogram = "==3.0.0b7"
 sqlalchemy = "*"
 sqlalchemy-serializer = "*"
+pillow = "*"
 
 [dev-packages]
 
