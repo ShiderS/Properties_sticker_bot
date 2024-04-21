@@ -1,11 +1,10 @@
 import sqlalchemy
 from sqlalchemy_serializer import SerializerMixin
-from flask_login import UserMixin
 
 from .db_session import SqlAlchemyBase
 
 
-class Pattern(SqlAlchemyBase, UserMixin, SerializerMixin):
+class Pattern(SqlAlchemyBase, SerializerMixin):
     __tablename__ = "patterns"
 
     id = sqlalchemy.Column(sqlalchemy.Integer, primary_key=True, nullable=False, autoincrement=True)
