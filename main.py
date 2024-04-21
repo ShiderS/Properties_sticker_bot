@@ -2,7 +2,7 @@ import asyncio
 
 
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters.callback_data import CallbackData
@@ -37,6 +37,7 @@ in_time = []
 in_answer = [False, 0]
 
 flag_pattern_name = False
+flag_view_pattern = False
 
 
 class PhotoState(StatesGroup):
@@ -71,9 +72,15 @@ def del_last_pattern(message):
         DB_SESS.commit()
 
 
+def null_flags():
+    global flag_view_pattern
+    flag_view_pattern = False
+
+
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message) -> Message:
     del_last_pattern(message)
+    null_flags()
     if message.chat.id not in [i.id for i in DB_SESS.query(User).all()]:
         user = User(
             id=message.chat.id,
@@ -96,13 +103,8 @@ async def help(message: types.Message) -> Message:
 @dp.message(F.text == "Меню")
 async def menu(message: types.Message) -> Message:
     del_last_pattern(message)
+    null_flags()
     await message.answer("Меню", reply_markup=keyboard_user)
-
-
-@dp.message(Command("image"))
-async def get_photo(message: types.Message, state: FSMContext) -> Message:
-    await message.answer("Пришлите своё фото")
-    await state.set_state(PhotoState.waiting_for_photo)
 
 
 # Команда для обращения в поддержку
@@ -110,6 +112,7 @@ async def get_photo(message: types.Message, state: FSMContext) -> Message:
 @dp.message(F.text == "Обратная связь")
 async def support(message: types.Message):
     del_last_pattern(message)
+    null_flags()
     if message.from_user.id in [i.id for i in DB_SESS.query(User).filter(User.is_developer).all()]:
         await message.reply("Вы являетесь админом и не можете задавать вопросы.")
     else:
@@ -122,6 +125,7 @@ async def support(message: types.Message):
 @dp.message(F.text == "Создать стикерпак")
 async def create_stickerpak(message: types.Message) -> Message:
     del_last_pattern(message)
+    null_flags()
     await message.answer(
         "Выбрать шаблон из доступных или создать свой?",
         reply_markup=keyboard_user_pattern,
@@ -132,6 +136,7 @@ async def create_stickerpak(message: types.Message) -> Message:
 @dp.message(F.text == "Создать шаблон")
 async def create_template(message: types.Message) -> Message:
     del_last_pattern(message)
+    null_flags()
     await message.answer(
         "Будет ли ваш шаблон доступен для других пользователей?\n"
         "Если да, для начала он должен будет пройти проверку администрацией,"
@@ -143,8 +148,8 @@ async def create_template(message: types.Message) -> Message:
 @dp.message(Command("choose_pattern"))
 @dp.message(F.text == "Выбрать шаблон")
 async def choose_template(message: types.Message) -> Message:
-    global flag_pattern_name
-    flag_pattern_name = True
+    global flag_view_pattern
+    flag_view_pattern = True
     for p in [0, 1, 2]:
         base_patterns = DB_SESS.query(Pattern).filter(Pattern.pattern_id == p).all()
         media_group_goo = [
@@ -154,17 +159,30 @@ async def choose_template(message: types.Message) -> Message:
         await message.answer(f"{p + 1} шаблон")
     await message.answer(
         "Выберете нужный вам шаблон из предложенных или воспользуйтесь шаблонами "
-        'других пользователей.\n /view_pattern "id" - просмотреть шаблон\n'
-        '/pattern "id" - выбрать нужный шаблон',
+        'других пользователей.\n/select_pattern "Название шаблона" - выбрать шаблон'
+        "Чтобы просмотреть шаблон, напишите в чат его название",
         reply_markup=keyboard_base_patterns,
     )
 
 
-# Выбор шаблона из базовых или шаблонов других пользователей(по id или названию шаблона)
-@dp.message(Command("Pattern"))
-@dp.message(F.text == "")
-async def choose_tempate(message: types.Message) -> Message:
-    pass
+@dp.message(Command("select_pattern"))
+async def select_pattern(
+        message: Message,
+        command: CommandObject,
+        state: FSMContext
+):
+    null_flags()
+    del_last_pattern(message)
+    if command.args is None:
+        await message.answer("Вы не написали название шаблона.")
+    else:
+        pattern_name = command.args
+        pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == pattern_name).all()
+        if len(pattern) == 0:
+            await message.answer("Шаблона с таким названием не существует")
+        else:
+            await message.answer(f"Шаблон {pattern_name} выбран, отправьте свою фотографию")
+            await state.set_state(PhotoState.waiting_for_photo)
 
 
 # для генерации стикерпака
@@ -222,7 +240,10 @@ async def create_pattern_db(pattern_id, user_id, for_everyone, file_id):
 @dp.message(Command("for_everyone"))
 @dp.message(F.text == "Публичный")
 async def public_template(message: types.Message, state: FSMContext) -> Message:
+    null_flags()
+
     global pattern_id, flag_pattern_name
+
     patterns = DB_SESS.query(Pattern).all()
     if len(patterns) == 0:
         pattern_id = 0
@@ -237,7 +258,10 @@ async def public_template(message: types.Message, state: FSMContext) -> Message:
 @dp.message(Command("for_me"))
 @dp.message(F.text == "Приватный")
 async def private_template(message: types.Message, state: FSMContext) -> Message:
+    null_flags()
+
     global pattern_id, flag_pattern_name
+
     patterns = DB_SESS.query(Pattern).all()
     if len(patterns) == 0:
         pattern_id = 0
@@ -254,7 +278,8 @@ async def private_template(message: types.Message, state: FSMContext) -> Message
 @dp.message()
 async def handle_message(message: types.Message):
     # Проверяем, обратился ли пользователь в поддержку
-    global in_answer, flag_pattern_name
+    global in_answer, flag_pattern_name, flag_view_pattern
+
     if flag_pattern_name:
         patterns_user = DB_SESS.query(Pattern).filter(Pattern.user_id == message.from_user.id).all()
         last_pattern_id = max(i.pattern_id for i in patterns_user)
@@ -264,7 +289,16 @@ async def handle_message(message: types.Message):
         DB_SESS.commit()
         flag_pattern_name = False
         await message.answer(f"Ваш шаблон был добавлен в базу данных с названием {message.text}")
-
+    elif flag_view_pattern:
+        pattern_name = message.text
+        pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == pattern_name).all()
+        if len(pattern) == 0:
+            await message.answer("Шаблона с таким названием не существует")
+        else:
+            media_group_goo = [
+                InputMediaPhoto(media=i.image_id) for i in pattern
+            ]
+            await message.answer_media_group(media=media_group_goo)
     elif in_answer[0]:
         admin = DB_SESS.query(User).filter(User.id == message.from_user.id).first()
         admin.workload -= 1
