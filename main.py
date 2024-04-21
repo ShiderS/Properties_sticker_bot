@@ -150,19 +150,36 @@ async def create_template(message: types.Message) -> Message:
 async def choose_template(message: types.Message) -> Message:
     global flag_view_pattern
     flag_view_pattern = True
-    for p in [0, 1, 2]:
-        base_patterns = DB_SESS.query(Pattern).filter(Pattern.pattern_id == p).all()
-        media_group_goo = [
-            InputMediaPhoto(media=i.image_id) for i in base_patterns
-        ]
-        await message.answer_media_group(media=media_group_goo)
-        await message.answer(f"{p + 1} шаблон")
+    base_patterns_collage = DB_SESS.query(Pattern).filter(Pattern.pattern_id == 0)
+    media_group_goo = [
+        InputMediaPhoto(media=i.image_id) for i in base_patterns_collage
+    ]
+    await message.answer_media_group(media=media_group_goo)
     await message.answer(
         "Выберете нужный вам шаблон из предложенных или воспользуйтесь шаблонами "
-        'других пользователей.\n/select_pattern "Название шаблона" - выбрать шаблон'
+        'других пользователей.\n/select_pattern "Название шаблона" - выбрать шаблон\n'
+        "/patterns - вывести список всех доступных шаблонов"
         "Чтобы просмотреть шаблон, напишите в чат его название",
         reply_markup=keyboard_base_patterns,
     )
+
+
+@dp.message(Command("patterns"))
+async def patterns(message: Message):
+    base_patterns = []
+    for p in range(len(DB_SESS.query(Pattern).filter(Pattern.pattern_id == 0).all())):
+        base_patterns.append(DB_SESS.query(Pattern).filter(Pattern.pattern_id == (p + 1)).first().pattern_name)
+    patterns_users = []
+    for p in DB_SESS.query(Pattern).filter(Pattern.is_public == 1).all():
+        if p.pattern_name not in patterns_users:
+            patterns_users.append(p.pattern_name)
+    my_patterns = []
+    for p in DB_SESS.query(Pattern).filter(Pattern.user_id == message.from_user.id).all():
+        if p.pattern_name not in my_patterns:
+            my_patterns.append(p.pattern_name)
+    await message.answer(f"Базовые шаблоны: {base_patterns}\n"
+                         f"Шаблоны других пользователей: {patterns_users}\n"
+                         f"Ваши шаблоны: {my_patterns}")
 
 
 @dp.message(Command("select_pattern"))
@@ -284,11 +301,14 @@ async def handle_message(message: types.Message):
         patterns_user = DB_SESS.query(Pattern).filter(Pattern.user_id == message.from_user.id).all()
         last_pattern_id = max(i.pattern_id for i in patterns_user)
         last_pattern_user = DB_SESS.query(Pattern).filter(Pattern.pattern_id == last_pattern_id).all()
-        for p in last_pattern_user:
-            p.pattern_name = message.text
-        DB_SESS.commit()
-        flag_pattern_name = False
-        await message.answer(f"Ваш шаблон был добавлен в базу данных с названием {message.text}")
+        if message.text not in [i.pattern_name for i in DB_SESS.query(Pattern).all()]:
+            for p in last_pattern_user:
+                p.pattern_name = message.text
+            DB_SESS.commit()
+            flag_pattern_name = False
+            await message.answer(f"Ваш шаблон был добавлен в базу данных с названием {message.text}")
+        else:
+            await message.answer(f"Шаблон с таким названием уже существует, придумайте другое.")
     elif flag_view_pattern:
         pattern_name = message.text
         pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == pattern_name).all()
