@@ -10,8 +10,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, FSInputFile
 from aiogram.types.input_media_photo import InputMediaPhoto
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-
+from aiogram.enums import ParseMode
 from config.config import TG_TOKEN_DEV
+from aiogram.exceptions import TelegramBadRequest 
 from config.kb import (
     keyboard_user,
     keyboard_user_create_pattern,
@@ -75,17 +76,49 @@ async def process_message(
     state: FSMContext,
 ) -> Message:
     image_id = message.photo[-1].file_id
-    image = await bot.get_file(image_id)
-    image_path = image.file_path
-    output_sticker_path = f"stickers/{image_id}.png"
-    image = await bot.download_file(image_path, output_sticker_path)
+    image_info = await bot.get_file(image_id)
+    image_path = image_info.file_path
 
-    await bot.create_new_sticker_set(user_id=message.from_user.id, name="bot_by_teststikerbot", title="title", emojis='😊', png_sticker=FSInputFile(output_sticker_path))
-    await bot.send_sticker(message.chat.id, FSInputFile(output_sticker_path))
-    # await bot.add_sticker_to_set(user_id=message.chat.id, name="name_sticker", emojis="😀", png_sticker=FSInputFile(output_sticker_path))
+    output_sticker_path = f"stickers/{image_id}.png"
+
+    await bot.download_file(image_path, output_sticker_path)
+
+    with Image.open(output_sticker_path) as img:
+        # Масштабирование с сохранением пропорций, если необходимо
+        max_size = (512, 512)
+        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+        # Центрирование и обрезка до 512x512
+        width, height = img.size
+        left = (width - 512) / 2 if width > 512 else 0
+        top = (height - 512) / 2 if height > 512 else 0
+        right = (width + 512) / 2 if width > 512 else width
+        bottom = (height + 512) / 2 if height > 512 else height
+        img = img.crop((left, top, right, bottom))
+
+        # Сохранение изображения
+        img.save(output_sticker_path)
+    try:
+        await bot.create_new_sticker_set(
+            user_id=message.from_user.id,
+            name=f"fignya_by_PropertiesStickerBot",
+            title="Your Sticker Set",
+            emojis="😊",
+            png_sticker=FSInputFile(output_sticker_path),
+        )
+    except TelegramBadRequest:
+        await bot.add_sticker_to_set(
+            user_id=message.from_user.id,
+            name=f"fignya_by_PropertiesStickerBot",
+            emojis="😁",
+            png_sticker=FSInputFile(output_sticker_path),
+        )
+    url = f"https://t.me/addstickers/fignya_by_PropertiesStickerBot"
+    await message.answer(
+        f"Here is your sticker pack: [Click here to view it]({url})",
+        parse_mode=ParseMode.MARKDOWN,
+    )
 
     await state.clear()
-
 
 
 @dp.message(Command("start"))
@@ -99,7 +132,6 @@ async def cmd_start(message: types.Message) -> Message:
         DB_SESS.add(user)
         DB_SESS.commit()
     text_answer = f"Привет {message.from_user.first_name}"
-    
 
     await message.answer(text_answer, reply_markup=keyboard_user)
 
