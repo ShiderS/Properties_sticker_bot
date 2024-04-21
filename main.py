@@ -158,7 +158,7 @@ async def choose_template(message: types.Message) -> Message:
     await message.answer(
         "Выберете нужный вам шаблон из предложенных или воспользуйтесь шаблонами "
         'других пользователей.\n/select_pattern "Название шаблона" - выбрать шаблон\n'
-        "/patterns - вывести список всех доступных шаблонов"
+        "/patterns - вывести список всех доступных шаблонов\n"
         "Чтобы просмотреть шаблон, напишите в чат его название",
         reply_markup=keyboard_base_patterns,
     )
@@ -177,9 +177,9 @@ async def patterns(message: Message):
     for p in DB_SESS.query(Pattern).filter(Pattern.user_id == message.from_user.id).all():
         if p.pattern_name not in my_patterns:
             my_patterns.append(p.pattern_name)
-    await message.answer(f"Базовые шаблоны: {base_patterns}\n"
-                         f"Шаблоны других пользователей: {patterns_users}\n"
-                         f"Ваши шаблоны: {my_patterns}")
+    await message.answer(f"Базовые шаблоны:\n{', '.join(base_patterns)}\n"
+                         f"Шаблоны других пользователей:\n{', '.join(patterns_users)}\n"
+                         f"Ваши шаблоны:\n{', '.join(my_patterns)}\n")
 
 
 @dp.message(Command("select_pattern"))
@@ -291,6 +291,78 @@ async def private_template(message: types.Message, state: FSMContext) -> Message
 # ---------------------------------------------------------------
 
 
+# -------------------Адмиристратор---------------------------
+@dp.message(Command("set_admin"))
+async def set_admin(
+        message: types.Message,
+        command: CommandObject,
+):
+    if DB_SESS.query(User).filter(User.id == message.from_user.id).first().is_developer:
+        if not command.args:
+            await message.answer("Вы не ввели никнейм пользователя")
+        U = DB_SESS.query(User).filter(User.tg_name == int(command.args)).first()
+        U.is_developer = 1
+        DB_SESS.commit()
+        await message.answer(f"Пользователь {U.tg_name} назначен администратором")
+    else:
+        await message.answer(f"У вас нет прав, чтобы использовать эту команду")
+
+
+@dp.message(Command("check_patterns"))
+async def check_patterns(
+        message: types.Message,
+):
+    if DB_SESS.query(User).filter(User.id == message.from_user.id).first().is_developer:
+        patterns = []
+        for i in DB_SESS.query(Pattern).filter(Pattern.for_everyone == 1 and Pattern.is_public != 1).all():
+            if i.pattern_name not in patterns:
+                patterns.append(i.pattern_name)
+        await message.answer(f"Список шаблонов пользователей, нуждающихся в проверке:\n{', '.join(patterns)}")
+    else:
+        await message.answer(f"У вас нет прав, чтобы использовать эту команду")
+
+
+@dp.message(Command("view_pattern"))
+async def check_pattern(
+        message: types.Message,
+        command: CommandObject
+):
+    if DB_SESS.query(User).filter(User.id == message.from_user.id).first().is_developer:
+        if command.args:
+            pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == command.args).all()
+            if len(pattern) == 0:
+                await message.answer("Шаблона с таким названием не существует или вы ввели неправильное название")
+            else:
+                media_group_goo = [
+                    InputMediaPhoto(media=i.image_id) for i in pattern
+                ]
+                await message.answer_media_group(media=media_group_goo)
+    else:
+        await message.answer(f"У вас нет прав, чтобы использовать эту команду")
+
+
+@dp.message(Command("approve_pattern"))
+async def approve_pattern(
+        message: types.Message,
+        command: CommandObject
+):
+    if DB_SESS.query(User).filter(User.id == message.from_user.id).first().is_developer:
+        if command.args:
+            pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == command.args).all()
+            if len(pattern) == 0:
+                await message.answer("Шаблона с таким названием не существует или вы ввели неправильное название")
+            else:
+                for i in pattern:
+                    i.is_public = 1
+                DB_SESS.commit()
+                await message.answer(f"Шаблону {pattern[0].pattern_name} присвоен публичный статус")
+        else:
+            await message.answer(f"У вас нет прав, чтобы использовать эту команду")
+
+
+# --------------------------------------------------------------
+
+
 # -------------------------Поддержка-----------------------------
 @dp.message()
 async def handle_message(message: types.Message):
@@ -311,7 +383,8 @@ async def handle_message(message: types.Message):
             await message.answer(f"Шаблон с таким названием уже существует, придумайте другое.")
     elif flag_view_pattern:
         pattern_name = message.text
-        pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == pattern_name).all()
+        pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == pattern_name and
+                                                (Pattern.is_public or Pattern.user_id == message.from_user.id)).all()
         if len(pattern) == 0:
             await message.answer("Шаблона с таким названием не существует")
         else:
