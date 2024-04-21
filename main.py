@@ -1,4 +1,5 @@
 import asyncio
+import io
 from typing import Optional
 
 from aiogram import Bot, Dispatcher, F, types
@@ -6,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message
+from aiogram.types import Message, FSInputFile
 from aiogram.types.input_media_photo import InputMediaPhoto
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -74,10 +75,17 @@ async def process_message(
     state: FSMContext,
 ) -> Message:
     image_id = message.photo[-1].file_id
-    list_photo.append(image_id)
-    media_group_odnorazki = [InputMediaPhoto(media=i) for i in list_photo]
-    await message.answer_media_group(media=media_group_odnorazki)
+    image = await bot.get_file(image_id)
+    image_path = image.file_path
+    output_sticker_path = f"stickers/{image_id}.png"
+    image = await bot.download_file(image_path, output_sticker_path)
+
+    await bot.create_new_sticker_set(user_id=message.from_user.id, name="bot_by_teststikerbot", title="title", emojis='😊', png_sticker=FSInputFile(output_sticker_path))
+    await bot.send_sticker(message.chat.id, FSInputFile(output_sticker_path))
+    # await bot.add_sticker_to_set(user_id=message.chat.id, name="name_sticker", emojis="😀", png_sticker=FSInputFile(output_sticker_path))
+
     await state.clear()
+
 
 
 @dp.message(Command("start"))
@@ -91,6 +99,7 @@ async def cmd_start(message: types.Message) -> Message:
         DB_SESS.add(user)
         DB_SESS.commit()
     text_answer = f"Привет {message.from_user.first_name}"
+    
 
     await message.answer(text_answer, reply_markup=keyboard_user)
 
