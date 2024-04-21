@@ -1,4 +1,7 @@
 import asyncio
+import subprocess
+import os
+import json
 
 
 from aiogram import Bot, Dispatcher, F, types
@@ -9,6 +12,8 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 from aiogram.types.input_media_photo import InputMediaPhoto
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+from PIL import Image
 from data import db_session
 from typing import Optional
 
@@ -18,8 +23,7 @@ from data.pattern import Pattern
 from config.kb import (
     keyboard_user,
     keyboard_user_create_pattern,
-    keyboard_user_pattern,
-    keyboard_base_patterns
+    keyboard_user_pattern
 )
 
 
@@ -31,6 +35,7 @@ dp = Dispatcher()
 
 images_list = []
 pattern_id = 0
+pattern_folder = ""
 
 users_in_support = []
 in_time = []
@@ -75,6 +80,30 @@ def del_last_pattern(message):
 def null_flags():
     global flag_view_pattern
     flag_view_pattern = False
+
+
+def dir_cleaning(directory):
+    for filename in os.listdir(directory):
+        filepath = os.path.join(directory, filename)
+        try:
+            if os.path.isfile(filepath):
+                os.remove(filepath)
+        except Exception as e:
+            print(f"Ошибка при удалении файла {filename}: {e}")
+
+
+async def faceswap(patternfolder):
+    dir_cleaning('/faceswap/inFace') # Очищаем папку с картинкой пользователя
+    dir_cleaning('/faceswap/outDir') # Очищаем папку в которой лежат уже готовые фотки
+
+    #код сохранения кортинки пользователя в папку faceswap/inFace
+
+    subprocess.call("python faceswap/faceswap.py extract -i faceswap/inFace -o faceswap/faces -D mtcnn -A cv2-dnn",
+                    shell=True) # Выполняем волшебные действия для добычи лица из фотки пользователя
+
+    subprocess.call(f"python faceswap/faceswap.py convert -i faceswap/patterns/{patternfolder} -o faceswap/outDir -p faceswap/inFace/alignments.fsa -m faceswap/hackaton_smart_cnn -c color-transfer -M none -w opencv",
+                    shell=True)# faceswap/patterns/название папки с шаблонами
+    # В папке faceswap/outDir хранятся обработанные фотки
 
 
 @dp.message(Command("start"))
@@ -154,13 +183,21 @@ async def choose_template(message: types.Message) -> Message:
     media_group_goo = [
         InputMediaPhoto(media=i.image_id) for i in base_patterns_collage
     ]
+    patterns = []
+    for p in DB_SESS.query(Pattern).all():
+        if p.pattern_name not in patterns and p.pattern_id in [1, 2]:
+            patterns.append(p.pattern_name)
+    kb_base_patterns = [
+        [KeyboardButton(text=patterns[0])],
+        [KeyboardButton(text=patterns[1])],
+    ]
     await message.answer_media_group(media=media_group_goo)
     await message.answer(
         "Выберете нужный вам шаблон из предложенных или воспользуйтесь шаблонами "
         'других пользователей.\n/select_pattern "Название шаблона" - выбрать шаблон\n'
-        "/patterns - вывести список всех доступных шаблонов"
+        "/patterns - вывести список всех доступных шаблонов\n"
         "Чтобы просмотреть шаблон, напишите в чат его название",
-        reply_markup=keyboard_base_patterns,
+        reply_markup=ReplyKeyboardMarkup(keyboard=kb_base_patterns),
     )
 
 
@@ -177,9 +214,41 @@ async def patterns(message: Message):
     for p in DB_SESS.query(Pattern).filter(Pattern.user_id == message.from_user.id).all():
         if p.pattern_name not in my_patterns:
             my_patterns.append(p.pattern_name)
-    await message.answer(f"Базовые шаблоны: {base_patterns}\n"
-                         f"Шаблоны других пользователей: {patterns_users}\n"
-                         f"Ваши шаблоны: {my_patterns}")
+    await message.answer(f"Базовые шаблоны:\n{', '.join(base_patterns)}\n"
+                         f"Шаблоны других пользователей:\n{', '.join(patterns_users)}\n"
+                         f"Ваши шаблоны:\n{', '.join(my_patterns)}\n")
+
+
+def create_folder_if_not_exists(folder_name):
+    if not os.path.exists(f"faceswap/patterns/{folder_name}"):
+        os.makedirs(f"faceswap/patterns/{folder_name}")
+
+
+async def download_pattern(list_id, pattern_name):
+    for i in list_id:
+        image_info = await bot.get_file(i)
+        image_path = image_info.file_path
+
+        create_folder_if_not_exists(pattern_name)
+
+        output_sticker_path = f"faceswap/patterns/{pattern_name}/{i}.png"
+
+        await bot.download_file(image_path, output_sticker_path)
+
+        with Image.open(output_sticker_path) as img:
+            img.save(output_sticker_path)
+
+
+async def download_image(image_id):
+    image_info = await bot.get_file(image_id)
+    image_path = image_info.file_path
+
+    output_sticker_path = f"faceswap/inFace/{image_id}.png"
+
+    await bot.download_file(image_path, output_sticker_path)
+
+    with Image.open(output_sticker_path) as img:
+        img.save(output_sticker_path)
 
 
 @dp.message(Command("select_pattern"))
@@ -190,6 +259,9 @@ async def select_pattern(
 ):
     null_flags()
     del_last_pattern(message)
+
+    global pattern_folder
+
     if command.args is None:
         await message.answer("Вы не написали название шаблона.")
     else:
@@ -198,7 +270,9 @@ async def select_pattern(
         if len(pattern) == 0:
             await message.answer("Шаблона с таким названием не существует")
         else:
+            pattern_folder = pattern_name
             await message.answer(f"Шаблон {pattern_name} выбран, отправьте свою фотографию")
+            await download_pattern([i.image_id for i in pattern], pattern_name)
             await state.set_state(PhotoState.waiting_for_photo)
 
 
@@ -209,7 +283,8 @@ async def process_message(
     state: FSMContext,
 ) -> Message:
     image_id = message.photo[-1].file_id
-    await message.answer_photo(photo=image_id)
+    await download_image(image_id)
+    # await faceswap(pattern_folder)
     await state.clear()
 
 
@@ -291,6 +366,112 @@ async def private_template(message: types.Message, state: FSMContext) -> Message
 # ---------------------------------------------------------------
 
 
+# -------------------Адмиристратор---------------------------
+@dp.message(Command("set_admin"))
+async def set_admin(
+        message: types.Message,
+        command: CommandObject,
+):
+    if DB_SESS.query(User).filter(User.id == message.from_user.id).first().is_developer:
+        if not command.args:
+            await message.answer("Вы не ввели никнейм пользователя")
+        U = DB_SESS.query(User).filter(User.tg_name == int(command.args)).first()
+        U.is_developer = 1
+        DB_SESS.commit()
+        await message.answer(f"Пользователь {U.tg_name} назначен администратором")
+    else:
+        await message.answer(f"У вас нет прав, чтобы использовать эту команду")
+
+
+@dp.message(Command("check_patterns"))
+async def check_patterns(
+        message: types.Message,
+):
+    if DB_SESS.query(User).filter(User.id == message.from_user.id).first().is_developer:
+        patterns = []
+        for i in DB_SESS.query(Pattern).filter(Pattern.for_everyone == 1 and Pattern.is_public != 1).all():
+            if i.pattern_name not in patterns:
+                patterns.append(i.pattern_name)
+        await message.answer(f"Список шаблонов пользователей, нуждающихся в проверке:\n{', '.join(patterns)}")
+    else:
+        await message.answer(f"У вас нет прав, чтобы использовать эту команду")
+
+
+@dp.message(Command("view_pattern"))
+async def view_pattern(
+        message: types.Message,
+        command: CommandObject
+):
+    if DB_SESS.query(User).filter(User.id == message.from_user.id).first().is_developer:
+        if command.args:
+            pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == command.args).all()
+            if len(pattern) == 0:
+                await message.answer("Шаблона с таким названием не существует или вы ввели неправильное название")
+            else:
+                media_group_goo = [
+                    InputMediaPhoto(media=i.image_id) for i in pattern
+                ]
+                await message.answer_media_group(media=media_group_goo)
+        else:
+            await message.answer("Вы не указали название шаблона")
+    else:
+        await message.answer(f"У вас нет прав, чтобы использовать эту команду")
+
+
+@dp.message(Command("approve_pattern"))
+async def approve_pattern(
+        message: types.Message,
+        command: CommandObject
+):
+    if DB_SESS.query(User).filter(User.id == message.from_user.id).first().is_developer:
+        if command.args:
+            pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == command.args).all()
+            if len(pattern) == 0:
+                await message.answer("Шаблона с таким названием не существует или вы ввели неправильное название")
+            else:
+                for i in pattern:
+                    i.is_public = 1
+                DB_SESS.commit()
+                await message.answer(f"Шаблону {pattern[0].pattern_name} присвоен публичный статус")
+        else:
+            await message.answer("Вы не указали название ")
+    else:
+        await message.answer(f"У вас нет прав, чтобы использовать эту команду")
+
+
+@dp.message(Command("not_approve_pattern"))
+async def not_approve_pattern(
+        message: types.Message,
+        command: CommandObject
+):
+    if DB_SESS.query(User).filter(User.id == message.from_user.id).first().is_developer:
+        if command.args:
+            try:
+                pattern_name, text = command.args.split(" ", maxsplit=1)
+                print(pattern_name, text)
+                pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == pattern_name).all()
+                if len(pattern) == 0:
+                    await message.answer("Шаблона с таким названием не существует или вы ввели неправильное название")
+                else:
+                    for i in pattern:
+                        i.for_everyone = 0
+                    DB_SESS.commit()
+                    await message.answer(f"Шаблону {pattern[0].pattern_name} присвоен публичный статус")
+                # Если получилось меньше двух частей, вылетит ValueError
+            except ValueError:
+                await message.answer(
+                    "Ошибка: неправильный формат команды. Пример:\n"
+                    "/not_approve_pattern <Название шаблона> <Пояснение>"
+                )
+        else:
+            await message.answer(f"Не переданы аргументы")
+    else:
+        await message.answer(f"У вас нет прав, чтобы использовать эту команду")
+
+
+# --------------------------------------------------------------
+
+
 # -------------------------Поддержка-----------------------------
 @dp.message()
 async def handle_message(message: types.Message):
@@ -311,7 +492,8 @@ async def handle_message(message: types.Message):
             await message.answer(f"Шаблон с таким названием уже существует, придумайте другое.")
     elif flag_view_pattern:
         pattern_name = message.text
-        pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == pattern_name).all()
+        pattern = DB_SESS.query(Pattern).filter(Pattern.pattern_name == pattern_name and
+                                                (Pattern.is_public or Pattern.user_id == message.from_user.id)).all()
         if len(pattern) == 0:
             await message.answer("Шаблона с таким названием не существует")
         else:
@@ -371,6 +553,12 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    with open('needSetup.json') as file:
+        data = json.load(file)
+    if data['needSetup']:    data['needSetup'] = 0
+    with open('needSetup.json', 'w') as file:
+        json.dump(data, file)
+    subprocess.call("python faceswap/setup.py", shell=True)
     db_session.global_init("db/db.db")
     DB_SESS = db_session.create_session()
     asyncio.run(main())

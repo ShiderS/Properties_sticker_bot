@@ -8,8 +8,9 @@ python-dotenv = "*"
 aiogram = "==3.0.0b7"
 sqlalchemy = "*"
 sqlalchemy-serializer = "*"
+pillow = "*"
 
 [dev-packages]
 
 [requires]
-python_version = "3.11"
+python_version = "3.10"
